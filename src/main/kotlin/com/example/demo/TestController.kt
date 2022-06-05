@@ -1,6 +1,5 @@
 package com.example.demo
 
-import feign.Feign
 import feign.Param
 import feign.QueryMap
 import feign.RequestLine
@@ -13,46 +12,45 @@ import reactivefeign.webclient.WebReactiveFeign
 import reactor.core.publisher.Mono
 
 @RestController
-class TestController(webClient: WebClient.Builder) {
+class TestController(webClientBuilder: WebClient.Builder) {
 
-    val reactiveFeignClient: ReactiveFeignClient = WebReactiveFeign.builder<ReactiveFeignClient>(webClient)
+    val webClient = webClientBuilder
+        .baseUrl("http://localhost:8080")
+//            .filter(MetricsWebClientFilterFunction(Metrics.globalRegistry, ))
+        .build()
+
+    val reactiveFeignClient: ReactiveFeignClient = WebReactiveFeign.builder<ReactiveFeignClient>(webClientBuilder)
         .target(ReactiveFeignClient::class.java, "http://localhost:8080")
-
-    val feignClient: FeignClient = Feign.builder()
-        .target(FeignClient::class.java, "http://localhost:8080")
-
 
     @GetMapping("/api/test/{id}")
     @ResponseBody
-    fun entryPoint(@PathVariable id: String) = feignClient.getRequest(
-        id = id,
-        params = FeignClient.Query(param = "hello")
-    )
+    fun entryPoint(@PathVariable id: String) = webClient
+        .get()
+        .uri { uriBuilder ->
+            uriBuilder
+                .path("/api/test/{id}/webclient")
+                .queryParam("param", "value")
+                .build(id)
+        }
+        .retrieve()
+        .bodyToMono(String::class.java)
 
-    @GetMapping("/api/test/{id}/response")
+    @GetMapping("/api/test/{id}/webclient")
     @ResponseBody
     fun response(@PathVariable id: String) = reactiveFeignClient.getRequest(
         id = id,
         params = ReactiveFeignClient.Query(param = "world")
     )
 
-    @GetMapping("/api/test/{id}/response/reactive")
+    @GetMapping("/api/test/{id}/feign")
     @ResponseBody
     fun reactiveResponse(@PathVariable id: String) = "ok"
 
 }
 
-interface FeignClient {
-
-    @RequestLine("GET /api/test/{id}/response")
-    fun getRequest(@Param("id") id: String, @QueryMap params: Query): String
-
-    data class Query(val param: String)
-}
-
 interface ReactiveFeignClient {
 
-    @RequestLine("GET /api/test/{id}/response/reactive")
+    @RequestLine("GET /api/test/{id}/feign")
     fun getRequest(@Param("id") id: String, @QueryMap params: Query): Mono<String>
 
     data class Query(val param: String)
